@@ -1,0 +1,188 @@
+---
+title: "HE3021 Week 9 Tutorial 7 Attempt"
+author: "Lui Yu Sen U1930037F"
+date: "3/22/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(haven)
+library(tidyverse)
+library(stats)
+library(aod)
+library(prediction)
+library(margins)
+library(AER)
+
+filpaths <- list.files(path = paste0(getwd(),"//rawdata//"), 
+                       full.names = TRUE)
+mroz <- read_dta(file = filpaths[1])
+wage2 <- read_dta(file = filpaths[2])
+```
+
+Packages used:  
+haven, for reading dta files  
+tidyverse, for dataframe manipulation  
+stats, for GLM fitting  
+aod, for coefficient tests  
+prediction and margins, for evaluating probabilities and marginal effects for probit and logit models  
+AER, for 2-step regression for instrumental variables  
+
+# 1
+
+## a 
+
+```{r, echo = TRUE}
+mroz_logit <- glm(formula = inlf ~ nwifeinc + educ + kidslt6 + age + exper,
+                  data = mroz, family = binomial(link = "logit"))
+mroz_probit <- glm(formula = inlf ~ nwifeinc + educ + kidslt6 + age + exper,
+                  data = mroz, family = binomial(link = "probit"))
+summary(mroz_logit)
+```
+There is a negative sign for net wife income. The more income the wife has, the less likely she is to seek a job. Additional income not as necessary.  
+There is a positive sign for education. The more educated she is, the more likely she is to seek a job, since there are greater expected wages from greater expected returns to education.  
+There is a negative sign for kids less than 6. The more young kids she has, the more time she has to expend on her kids' care and the less she has for labour force participation.  
+There is a negative sign for age, the older the woman, the less likely she is to seek employment, since she has declining health and abilities.  
+There is a positive sign for work experience. In general, a more experienced worker commands greater wages, increasing the expected wages for a prospective job seeker, thus higher chance for a woman to participate in the labour force.
+
+## b
+
+```{r, echo=TRUE}
+test_individual <- data.frame()
+test_individual <- rbind(test_individual, c(20, 10, 0, 30, 10))
+colnames(test_individual) <- c("nwifeinc", "educ", "kidslt6", "age", "exper")
+
+prediction(mroz_logit, at = test_individual)
+predict_test_value_logit <- 0.7881
+margins(mroz_logit, at = test_individual)
+partial_effect_exper_value_logit <- 0.01969
+
+prediction(mroz_probit, at = test_individual)
+predict_test_value_probit <- 0.79
+margins(mroz_probit, at = test_individual)
+partial_effect_exper_value_probit <- 0.01993
+```
+The logit value returned `r predict_test_value_logit` compared to probit's `r predict_test_value_probit`. Logit is lower since the cumulative normal distribution approaches 1 faster than the logistic CDF. 
+
+## c
+
+The logit partial effect of experience is `r partial_effect_exper_value_logit` compared to probit's `r partial_effect_exper_value_probit`. Since probit approaches 1 faster, the slope is higher, thus a higher marginal effect of experience.
+
+## d
+
+```{r, echo=TRUE}
+wald_test_age_exper0 <- wald.test(Sigma = vcov(mroz_logit), b = coef(mroz_logit), Terms = c(5, 6))
+wald_test_age_exper0_pvalue <- wald_test_age_exper0$result$chi2[3] # below minimum printed value
+wald_test_age_exper0
+```
+\begin{align}
+&H_0: \beta_{age}=\beta_{exper}=0, H_1: otherwise \\ 
+&\alpha=0.05,\ \chi^2 -test
+\end{align}
+The p-value was `r wald_test_age_exper0_pvalue`, which is less than 0.05. Thus we have sufficient evidence to reject the null hypothesis.
+
+# 2
+
+## a
+
+\begin{align}
+&Instrumental \ relevance: \ Cov(z, x)\neq 0 \\ 
+&Instrumental \ exogeneity: \ Cov(z, u)=0
+\end{align}
+
+## b 
+
+\begin{align}
+&\hat{Cov}(z,y) \\ 
+&=\hat{Cov}(z,\hat{\beta}_1 x_i) + \hat{Cov}(z,\hat{u}_i) \\ 
+&=\hat{\beta}_1 \hat{Cov}(z,x_i) \\ 
+&\hat{\beta}_1=\frac{\frac{1}{n-1}\sum^n_{i=1}(z_i-\bar{z})(y_i-\bar{y})}{\frac{1}{n-1}\sum^n_{i=1}(z_i-\bar{z})(x_i-\bar{x})}=\frac{\sum^n_{i=1}(z_i-\bar{z})(y_i-\bar{y})}{\sum^n_{i=1}(z_i-\bar{z})(x_i-\bar{x})}
+\end{align}
+
+## c
+
+\begin{align}
+&\hat{\beta}_{1,IV}=\frac{\sum^n_{i=1}(z_i-\bar{z})(y_i-\bar{y})}{\sum^n_{i=1}(z_i-\bar{z})(x_i-\bar{x})} \\ 
+&=\frac{\sum^n_{i=1}(z_i-\bar{z})(y_i)}{\sum^n_{i=1}(z_i-\bar{z})x_i} \\ 
+&=\frac{\sum^n_{i=1}(z_i-\bar{z})\beta_0+ \beta_1\sum^n_{i=1}(z_i-\bar{z})x_i+\sum^n_{i=1}(z_i-\bar{z})(u_i-\bar{u})}{\sum^n_{i=1}(z_i-\bar{z})x_i} \\ 
+&=\beta_1+\frac{\frac{1}{n-1}\sum^n_{i=1}(z_i-\bar{z})(u_i-\bar{u})}{\frac{1}{n-1}\sum^n_{i=1}(z_i-\bar{z})x_i}
+\end{align}
+As the $n\to\infty$, and the sample gets larger, we take limits on both sides. We know that $lim_{n\to\infty}\frac{1}{n-1}\sum^n_{i=1}(z_i-\bar{z})u_i=Cov(z,u)$ and $lim_{n\to\infty}\frac{1}{n-1}\sum^n_{i=1}(z_i-\bar{z})x_i=Cov(z,x)$, so
+\begin{align}
+&lim_{n\to\infty}\hat{\beta}_1=lim_{n\to\infty}(\beta_1+\frac{\frac{1}{n-1}\sum^n_{i=1}(z_i-\bar{z})(u_i-\bar{u})}{\frac{1}{n-1}\sum^n_{i=1}(z_i-\bar{z})x_i}) \\ 
+&=\beta_1+\frac{0}{Cov(z,x)} \\ 
+&=\beta_1
+\end{align}
+So $\beta_{1,IV}$ is a consistent estimator.
+
+## d
+
+We assume that the homoskedasticity assumption holds.
+\begin{align}
+&Var(\hat{\beta}_{1,IV}|z,x) \\ 
+&=Var(\frac{\sum^n_{i=1}(z_i-\bar{z})(u_i-\bar{u})}{\sum^n_{i=1}(z_i-\bar{z})(x_i-\bar{x})}|z,x) \\ 
+&=\frac{Var(\sum^n_{i=1}(z_i-\bar{z})(u_i-\bar{u})|z,x)}{[\sum^n_{i=1}(z_i-\bar{z})(x_i-\bar{x})]^2} \\ 
+&=\frac{\sum^n_{i=1}(z_i-\bar{z})^2Var(u_i|z,x)}{[\sum^n_{i=1}(z_i-\bar{z})(x_i-\bar{x})]^2} \\ 
+&=\frac{\sigma^2\sum^n_{i=1}(z_i-\bar{z})^2}{[\sum^n_{i=1}(z_i-\bar{z})(x_i-\bar{x})]^2} \ since \ z \ and \ u \ are \ i.i.d. \\ 
+&=\frac{\sigma^2}{\sum^n_{i=1}(x_i-\bar{x})^2}\cdot\frac{\sum^n_{i=1}(x_i-\bar{x})^2\cdot\sum^n_{i=1}(z_i-\bar{z})^2}{[\sum^n_{i=1}(z_i-\bar{z})(x_i-\bar{x})]^2} \\ 
+&=\frac{\sigma^2}{\sum^n_{i=1}(x_i-\bar{x})^2}\cdot\frac{1}{[\frac{\sum^n_{i=1}(z_i-\bar{z})(x_i-\bar{x})}{\sqrt{\sum^n_{i=1}(x_i-\bar{x})^2}\cdot\sqrt{\sum^n_{i=1}(z_i-\bar{z})^2}}]^2} \\ 
+&=\frac{\sigma^2}{\sum^n_{i=1}(x_i-\bar{x})^2}\cdot\frac{1}{\rho^2_{z,x}}
+\end{align}
+Since $-1\leq\frac{\sum^n_{i=1}(z_i-\bar{z})(x_i-\bar{x})}{\sqrt{\sum^n_{i=1}(x_i-\bar{x})^2}\cdot\sqrt{\sum^n_{i=1}(z_i-\bar{z})^2}}\leq1$, then $0\leq[\frac{\sum^n_{i=1}(z_i-\bar{z})(x_i-\bar{x})}{\sqrt{\sum^n_{i=1}(x_i-\bar{x})^2}\cdot\sqrt{\sum^n_{i=1}(z_i-\bar{z})^2}}]^2\leq1$, and $1\leq\frac{1}{\rho^2_{z,x}}$, and  
+$$
+Var(\hat{\beta}_{1,OLS}|z,x)=\frac{\sigma^2}{\sum^n_{i=1}(x_i-\bar{x})^2}\leq\frac{\sigma^2}{\sum^n_{i=1}(x_i-\bar{x})^2}\cdot\frac{1}{\rho^2_{z,x}}=Var(\hat{\beta}_{1,IV}|z,x)
+$$
+
+# 3
+
+## a
+
+```{r, echo=TRUE}
+wage_model_IV <- ivreg(formula = lwage ~ educ| sibs, data = wage2)
+wage_model_sibs <- lm(formula = lwage ~ sibs, data = wage2)
+summary(wage_model_sibs)
+```
+On average, an additional sibling changes wages by `r wage_model_sibs$coefficients[2]*100`% approximately.  
+With more siblings, a family has less income to distribute to each child, holding income constant. So it is likely that they are unable to afford the same education than if they were to have less children. With less education, the likelihood of securing employment falls, so wages are lower on average.
+
+## b
+
+```{r, echo=TRUE}
+educ_brthord_model <- lm(formula = educ ~ brthord, data = wage2)
+summary(educ_brthord_model)
+# statistically significant, fulfills instrumental relevancy condition
+```
+\begin{align}
+&H_0: \beta_{brthord}=0, H_1: otherwise \\ 
+&\alpha=0.05,\ \chi^2 -test
+\end{align}
+The p-value is `r wald.test(Sigma = vcov(educ_brthord_model), b = coef(educ_brthord_model), Terms = 2)$result$chi2[3]`, which is less than 0.05. Thus, there is sufficient evidence to reject the null hypothesis. brthord likely fulfills the instrument relevancy condition.
+
+## c
+
+```{r, echo=TRUE}
+reduced_form_educ <- lm(educ ~ brthord + sibs, data = wage2)
+summary(reduced_form_educ)
+wald.test(Sigma = vcov(reduced_form_educ), b = coef(reduced_form_educ), Terms = 3)
+```
+The identification assumption in this context means that the coefficient for sibs cannot be 0, so that we do not have a misidentified variable acting as an instrumental variable. To test for it, an LM-test was conducted, where the null hypothesis is that the coefficient is zero under $\alpha=0.05$. The p-value returned was `r wald.test(Sigma = vcov(reduced_form_educ), b = coef(reduced_form_educ), Terms = 3)$result$chi2[3]`<0.05, so we have sufficient evidence to reject the null hypothesis. The identification assumption is reasonable to hold.
+
+## d
+
+```{r, echo=TRUE}
+wage_model_IV_sibs_brthord <- ivreg(formula = lwage ~ educ + sibs | brthord + sibs, data = wage2)
+display <- summary(wage_model_IV_sibs_brthord)
+display
+```
+The standard error for educ/brthord is `r display$coefficients[2,2]`.  
+The standard error for sibs is `r display$coefficients[2,3]`.  
+Using sibs on its own when it is highly correlated with education increases the variance of the parameter estimators, since  
+\begin{align}
+&Var(\hat{\beta}_1)=\frac{\sigma^2}{\sum^n_{i=1}(x_i-\bar{x})\cdot(1-R^2)}\cdot\frac{1}{\hat{\rho}^2_{z,x}}
+\end{align}
+where $R^2$ is from the regression of education on sibs. Since sibs is significantly correlated with education, then this is close to 1, thus the variance of $\hat{\beta}_1$ is higher than if we were to just use sibs as an IV for educ. This is the same for $\hat{\beta}_2$ as well, since sibs is correlated with educ.
+
+## e
+
+The correlation between $\hat{educ}$ and sibs is `r cor(x = reduced_form_educ$fitted.values, y = reduced_form_educ$model$sibs)`. Thus, as explained in d, multicollinearity problems are likely.
