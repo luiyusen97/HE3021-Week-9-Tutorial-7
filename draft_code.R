@@ -28,11 +28,13 @@ prediction(mroz_logit, at = test_individual)
 predict_test_value_logit <- 0.7881
 margins(mroz_logit, at = test_individual)
 partial_effect_exper_value_logit <- 0.01969
+summary(margins(mroz_logit, at = test_individual))[3,7]/mroz_logit$coefficients[6]
 
 prediction(mroz_probit, at = test_individual)
 predict_test_value_probit <- 0.79
 margins(mroz_probit, at = test_individual)
 partial_effect_exper_value_probit <- 0.01993
+summary(margins(mroz_probit, at = test_individual))[3,7]/mroz_probit$coefficients[6]
 
 wald_test_age_exper0 <- wald.test(Sigma = vcov(mroz_logit), b = coef(mroz_logit), Terms = c(5, 6))
 wald_test_age_exper0_pvalue <- wald_test_age_exper0$result$chi2[3] # below minimum printed value

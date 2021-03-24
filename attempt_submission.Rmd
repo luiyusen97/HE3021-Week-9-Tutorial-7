@@ -54,20 +54,16 @@ test_individual <- rbind(test_individual, c(20, 10, 0, 30, 10))
 colnames(test_individual) <- c("nwifeinc", "educ", "kidslt6", "age", "exper")
 
 prediction(mroz_logit, at = test_individual)
-predict_test_value_logit <- 0.7881
 margins(mroz_logit, at = test_individual)
-partial_effect_exper_value_logit <- 0.01969
 
 prediction(mroz_probit, at = test_individual)
-predict_test_value_probit <- 0.79
 margins(mroz_probit, at = test_individual)
-partial_effect_exper_value_probit <- 0.01993
 ```
-The logit value returned `r predict_test_value_logit` compared to probit's `r predict_test_value_probit`. Logit is lower since the cumulative normal distribution approaches 1 faster than the logistic CDF. 
+The logit value returned `r summary(prediction(mroz_logit, at = test_individual))[6]` compared to probit's `r summary(prediction(mroz_probit, at = test_individual))[6]`. Logit is lower since the cumulative normal distribution approaches 1 faster than the logistic CDF. 
 
 ## c
 
-The logit partial effect of experience is `r partial_effect_exper_value_logit` compared to probit's `r partial_effect_exper_value_probit`. Since probit approaches 1 faster, the slope is higher, thus a higher marginal effect of experience.
+The logit partial effect of experience is `r summary(margins(mroz_logit, at = test_individual))[3,7]` compared to probit's `r summary(margins(mroz_probit, at = test_individual))[3,7]`. Since probit approaches 1 faster, the slope is steeper, thus a higher marginal effect of experience.  
 
 ## d
 
@@ -105,7 +101,7 @@ The p-value was `r wald_test_age_exper0_pvalue`, which is less than 0.05. Thus w
 \begin{align}
 &\hat{\beta}_{1,IV}=\frac{\sum^n_{i=1}(z_i-\bar{z})(y_i-\bar{y})}{\sum^n_{i=1}(z_i-\bar{z})(x_i-\bar{x})} \\ 
 &=\frac{\sum^n_{i=1}(z_i-\bar{z})(y_i)}{\sum^n_{i=1}(z_i-\bar{z})x_i} \\ 
-&=\frac{\sum^n_{i=1}(z_i-\bar{z})\beta_0+ \beta_1\sum^n_{i=1}(z_i-\bar{z})x_i+\sum^n_{i=1}(z_i-\bar{z})(u_i-\bar{u})}{\sum^n_{i=1}(z_i-\bar{z})x_i} \\ 
+&\approx \frac{\sum^n_{i=1}(z_i-\bar{z})\beta_0+ \beta_1\sum^n_{i=1}(z_i-\bar{z})x_i+\sum^n_{i=1}(z_i-\bar{z})(u_i-\bar{u})}{\sum^n_{i=1}(z_i-\bar{z})x_i} \\ 
 &=\beta_1+\frac{\frac{1}{n-1}\sum^n_{i=1}(z_i-\bar{z})(u_i-\bar{u})}{\frac{1}{n-1}\sum^n_{i=1}(z_i-\bar{z})x_i}
 \end{align}
 As the $n\to\infty$, and the sample gets larger, we take limits on both sides. We know that $lim_{n\to\infty}\frac{1}{n-1}\sum^n_{i=1}(z_i-\bar{z})u_i=Cov(z,u)$ and $lim_{n\to\infty}\frac{1}{n-1}\sum^n_{i=1}(z_i-\bar{z})x_i=Cov(z,x)$, so
@@ -144,6 +140,7 @@ wage_model_sibs <- lm(formula = lwage ~ sibs, data = wage2)
 summary(wage_model_sibs)
 ```
 On average, an additional sibling changes wages by `r wage_model_sibs$coefficients[2]*100`% approximately.  
+The formulae used to calculate them are different. With IV, the model uses the fitted values from regressing education on sibs instead of just the educ values.  
 With more siblings, a family has less income to distribute to each child, holding income constant. So it is likely that they are unable to afford the same education than if they were to have less children. With less education, the likelihood of securing employment falls, so wages are lower on average.
 
 ## b
@@ -164,9 +161,9 @@ The p-value is `r wald.test(Sigma = vcov(educ_brthord_model), b = coef(educ_brth
 ```{r, echo=TRUE}
 reduced_form_educ <- lm(educ ~ brthord + sibs, data = wage2)
 summary(reduced_form_educ)
-wald.test(Sigma = vcov(reduced_form_educ), b = coef(reduced_form_educ), Terms = 3)
+wald.test(Sigma = vcov(reduced_form_educ), b = coef(reduced_form_educ), Terms = 2)
 ```
-The identification assumption in this context means that the coefficient for sibs cannot be 0, so that we do not have a misidentified variable acting as an instrumental variable. To test for it, an LM-test was conducted, where the null hypothesis is that the coefficient is zero under $\alpha=0.05$. The p-value returned was `r wald.test(Sigma = vcov(reduced_form_educ), b = coef(reduced_form_educ), Terms = 3)$result$chi2[3]`<0.05, so we have sufficient evidence to reject the null hypothesis. The identification assumption is reasonable to hold.
+The identification assumption means that the coefficient for brthord cannot be 0. Since we are using sibs as an exogenous variable and brthord as the instrumental variable, then we need to make sure that after partialling out the effect of sibs on education, brthord is still instrumentally relevant with education. To test for it, an LM-test was conducted, where the null hypothesis is that the coefficient is zero under $\alpha=0.05$. The p-value returned was `r wald.test(Sigma = vcov(reduced_form_educ), b = coef(reduced_form_educ), Terms = 2)$result$chi2[3]`<0.05, so we have sufficient evidence to reject the null hypothesis. Thus, the indentification assumption can be held. 
 
 ## d
 
@@ -175,14 +172,14 @@ wage_model_IV_sibs_brthord <- ivreg(formula = lwage ~ educ + sibs | brthord + si
 display <- summary(wage_model_IV_sibs_brthord)
 display
 ```
-The standard error for educ/brthord is `r display$coefficients[2,2]`.  
-The standard error for sibs is `r display$coefficients[2,3]`.  
+The standard error for educ/brthord is `r display$coefficients[2,2]`, which is large.  
+The standard error for sibs is `r display$coefficients[2,3]`, which is large.  
 Using sibs on its own when it is highly correlated with education increases the variance of the parameter estimators, since  
 \begin{align}
 &Var(\hat{\beta}_1)=\frac{\sigma^2}{\sum^n_{i=1}(x_i-\bar{x})\cdot(1-R^2)}\cdot\frac{1}{\hat{\rho}^2_{z,x}}
 \end{align}
-where $R^2$ is from the regression of education on sibs. Since sibs is significantly correlated with education, then this is close to 1, thus the variance of $\hat{\beta}_1$ is higher than if we were to just use sibs as an IV for educ. This is the same for $\hat{\beta}_2$ as well, since sibs is correlated with educ.
+where $R^2$ is from the regression of education on sibs. Since sibs is significantly correlated with education, then this is closer to 1 (p-value=`r  wald.test(Sigma = vcov(reduced_form_educ), b = coef(reduced_form_educ), Terms = 3)$result$chi2[3]`<0.05), thus the variance of $\hat{\beta}_1$ is higher than if we were to not use sibs (coefficient would be `r ivreg(lwage~educ|brthord,data=wage2)$coefficients[2]`, and standard error would be `r summary(ivreg(lwage~educ|brthord,data=wage2))$coefficients[2,2]`). This is the same for $\hat{\beta}_2$ as well, since sibs is correlated with educ.
 
 ## e
 
-The correlation between $\hat{educ}$ and sibs is `r cor(x = reduced_form_educ$fitted.values, y = reduced_form_educ$model$sibs)`. Thus, as explained in d, multicollinearity problems are likely.
+The correlation between $\hat{educ}$ and sibs is `r cor(x = reduced_form_educ$fitted.values, y = reduced_form_educ$model$sibs)`. Thus, as explained in d, $R^2$ is likely very close to 1, so multicollinearity problems are likely.  
